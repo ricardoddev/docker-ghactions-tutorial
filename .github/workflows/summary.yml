@@ -1,0 +1,42 @@
+name: Summary new features
+on: 
+  pull_request:
+    types: [opened]
+
+jobs:
+  generate-summary:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup AI tool
+        run: |
+          curl -fsSL https://ollama.com/install.sh | sh
+          ollama serve &
+          sleep 10
+          ollama pull ${{ vars.AI_MODEL }}
+          git diff origin/${{ github.base_ref }}...HEAD > changes.diff
+          summary=$(ollama run ${{ vars.AI_MODEL }} "Based on this git diff, create a markdown summary of what was built in this PR. Include: ## Summary, ## Key Changes, ## Files Modified. Keep it concise and focus on what was implemented:\n\n$(head -c 4000 changes.diff)")
+          echo "$summary" > summary.md
+
+      - name: Comment on PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const summary = fs.readFileSync('summary.md', 'utf8');
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## 🤖 AI-Generated PR Summary\n\n${summary}\n\n---\n*Generated with local AI*`
+            });
+
+
+
+
+      
